@@ -1,0 +1,11 @@
+# Torch and Torchvision are reuired but as we're on Windows they need to be insstalled from somewhere special
+# pip install torch===1.4.0 torchvision===0.5.0 -f https://download.pytorch.org/whl/torch_stable.html
+# On Linux you just need
+# pip3 install torch torchvision
+# pip install -r requirements.txt
+black
+matplotlib
+numpy
+opencv-python
+pandas
+tqdm
