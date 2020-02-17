@@ -75,7 +75,7 @@ class Net(nn.Module):
 
         input_size_flattened = np.product(input_size)
         self.fc1 = nn.Linear(input_size_flattened, 512)
-        self.fc2 = nn.Linear(512, 2)
+        self.fc2 = nn.Linear(512, 10)
 
         # Define sigmoid activation and softmax output
         # self.sigmoid = nn.Sigmoid()
