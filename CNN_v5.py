@@ -18,6 +18,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import precision_recall_fscore_support as score
+import itertools
 import time
 import matplotlib.pyplot as plt
 from matplotlib import style
@@ -118,6 +121,41 @@ def step(x, y, net, optimizer, loss_function, train):
     return acc, loss
 
 
+@torch.no_grad()
+def get_all_preds(model, loader):
+    all_preds = torch.tensor([])
+    for batch in loader:
+        x, y = batch
+        preds = model(x)
+        all_preds = torch.cat((all_preds, preds), dim=0)
+    return all_preds
+
+
+def plot_confusion_matrix(cm, classes, normalize=False, title='Confusion matrix', cmap=plt.cm.Blues):
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt), horizontalalignment="center", color="white" if cm[i, j] > thresh else "black")
+
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+
+
 def main():
     if torch.cuda.is_available():
         device = torch.device("cuda:0")  # Can continue going on here, like cuda:1 cuda:2....etc.
@@ -129,6 +167,7 @@ def main():
     EPOCHS = 100
     TRAIN_BATCH_SIZE = 100
     TEST_BATCH_SIZE = 100
+    PRED_BATCH_SIZE = 100
 
     transforms = Compose([Resize((50, 50)), ToTensor()])
     dataset = ImageFolder("Data", transform=transforms)
@@ -138,6 +177,7 @@ def main():
     train, test = random_split(dataset, lengths=(train_len, test_len))
     train_loader = DataLoader(train, batch_size=TRAIN_BATCH_SIZE, shuffle=True)
     test_loader = DataLoader(test, batch_size=TEST_BATCH_SIZE, shuffle=False)
+    prediction_loader = DataLoader(dataset, batch_size=PRED_BATCH_SIZE)
 
     net = Net(INPUT_SIZE)
     optimizer = optim.Adam(net.parameters(), lr=0.001)
@@ -168,15 +208,32 @@ def main():
         avg_acc = sum_acc / len(test_loader)
         print(f"Validation accuracy: {avg_acc:.2f}")
 
-        """MODEL_NAME = f"model-{int(time.time())}"
-        f.write(f"{MODEL_NAME}, "
-                f"epoch: {epoch}, "
-                f"time:{round(time.time(), 3)}, "
-                f"train accuracy: {round(float(acc), 2)}, "
-                f"train loss: {round(float(loss), 4)}, "
-                f"validation accuracy: {round(float(val_acc), 2)}, "
-                f"validation loss: {round(float(val_loss), 4)}\n")
-                """
+    train_preds = get_all_preds(net, prediction_loader)
+    cm = confusion_matrix(dataset.targets, train_preds.argmax(dim=1))
+    names = ('Apartment Housing', 'Barren Land', 'Brick Kilns', 'Forest', 'Informal/Small Housing',
+             'Irrigated Agriculture', 'Large Industry', 'Non-irrigated Agriculture', 'Small Industry',
+             'Water (river/lake)')
+    plt.figure(figsize=(10, 10))
+    plot_confusion_matrix(cm, names)
+    plt.show()
+    precision, recall, f1_score, support = score(dataset.targets, train_preds.argmax(dim=1))
+    print('precision: {}'.format(precision, average="None"))
+    print('recall: {}'.format(recall, average="None"))
+    print('f1_score: {}'.format(f1_score, average="NOne"))
+    print('support: {}'.format(support, average="None"))
+    # print(f1_score(dataset.targets, train_preds.argmax(dim=1), average="macro"))
+    # print(precision_score(dataset.targets, train_preds.argmax(dim=1), average="macro"))
+    # print(recall_score(dataset.targets, train_preds.argmax(dim=1), average="macro"))
+
+"""MODEL_NAME = f"model-{int(time.time())}"
+    f.write(f"{MODEL_NAME}, "
+            f"epoch: {epoch}, "
+            f"time:{round(time.time(), 3)}, "
+            f"train accuracy: {round(float(acc), 2)}, "
+            f"train loss: {round(float(loss), 4)}, "
+            f"validation accuracy: {round(float(val_acc), 2)}, "
+            f"validation loss: {round(float(val_loss), 4)}\n")
+            """
 
 """style.use("ggplot")
 model_name = "model-1579796306"
