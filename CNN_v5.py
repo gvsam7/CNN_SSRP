@@ -219,7 +219,7 @@ def main():
     precision, recall, f1_score, support = score(dataset.targets, train_preds.argmax(dim=1))
     print('precision: {}'.format(precision, average="None"))
     print('recall: {}'.format(recall, average="None"))
-    print('f1_score: {}'.format(f1_score, average="NOne"))
+    print('f1_score: {}'.format(f1_score, average="None"))
     print('support: {}'.format(support, average="None"))
     # print(f1_score(dataset.targets, train_preds.argmax(dim=1), average="macro"))
     # print(precision_score(dataset.targets, train_preds.argmax(dim=1), average="macro"))
