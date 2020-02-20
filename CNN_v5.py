@@ -166,20 +166,38 @@ def main():
 
     EPOCHS = 100
     TRAIN_BATCH_SIZE = 100
+    # VAL_BATCH_SIZE = 100
     TEST_BATCH_SIZE = 100
     PRED_BATCH_SIZE = 100
 
     transforms = Compose([Resize((50, 50)), ToTensor()])
     dataset = ImageFolder("Data", transform=transforms)
+    testset = ImageFolder("Test", transform=transforms)
     INPUT_SIZE = dataset[0][0].shape
+    """
+    train_val_len = int(0.9 * len(dataset))
+    test_len = int(len(dataset) - train_val_len)
+    train_len = int(0.8 * 0.9 * len(dataset))
+    val_len = int(len(dataset) - test_len - train_len)
+    """
+    """train_len = int(0.7 * len(dataset))
+    val_len = int(0.1 * len(dataset))
+    test_len = int(len(dataset) - train_len - val_len)
+    # train, test = random_split(dataset, lengths=(train_len, test_len))
+    train, validation, test = random_split(dataset, lengths=(train_len, val_len, test_len))
+    train_loader = DataLoader(train, batch_size=TRAIN_BATCH_SIZE, shuffle=True)
+    val_loader = DataLoader(validation, batch_size=VAL_BATCH_SIZE, shuffle=False)
+    test_loader = DataLoader(test, batch_size=TEST_BATCH_SIZE, shuffle=False)
+    # prediction_loader = DataLoader(dataset, batch_size=PRED_BATCH_SIZE)
+    """
     train_len = int(0.8 * len(dataset))
     test_len = int(len(dataset) - train_len)
     train, test = random_split(dataset, lengths=(train_len, test_len))
     train_loader = DataLoader(train, batch_size=TRAIN_BATCH_SIZE, shuffle=True)
     test_loader = DataLoader(test, batch_size=TEST_BATCH_SIZE, shuffle=False)
-    prediction_loader = DataLoader(dataset, batch_size=PRED_BATCH_SIZE)
+    prediction_loader = DataLoader(testset, batch_size=PRED_BATCH_SIZE)
 
-    net = Net(INPUT_SIZE)
+    net = Net(INPUT_SIZE).to(device)
     optimizer = optim.Adam(net.parameters(), lr=0.001)
     loss_function = nn.CrossEntropyLoss()
 
@@ -208,15 +226,16 @@ def main():
         avg_acc = sum_acc / len(test_loader)
         print(f"Validation accuracy: {avg_acc:.2f}")
 
+    # train_preds = get_all_preds(net, test_loader)
     train_preds = get_all_preds(net, prediction_loader)
-    cm = confusion_matrix(dataset.targets, train_preds.argmax(dim=1))
+    cm = confusion_matrix(testset.targets, train_preds.argmax(dim=1))
     names = ('Apartment Housing', 'Barren Land', 'Brick Kilns', 'Forest', 'Informal/Small Housing',
              'Irrigated Agriculture', 'Large Industry', 'Non-irrigated Agriculture', 'Small Industry',
              'Water (river/lake)')
     plt.figure(figsize=(10, 10))
     plot_confusion_matrix(cm, names)
     plt.show()
-    precision, recall, f1_score, support = score(dataset.targets, train_preds.argmax(dim=1))
+    precision, recall, f1_score, support = score(testset.targets, train_preds.argmax(dim=1))
     print('precision: {}'.format(precision, average="None"))
     print('recall: {}'.format(recall, average="None"))
     print('f1_score: {}'.format(f1_score, average="None"))
