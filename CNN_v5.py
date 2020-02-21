@@ -24,6 +24,8 @@ import itertools
 import time
 import matplotlib.pyplot as plt
 from matplotlib import style
+import wandb
+wandb.init(project="cnn_ssrp")
 
 
 def _infer_conv_size(w, k, s, p, d):
@@ -212,8 +214,8 @@ def main():
             y = y.to(device) # .float()
             acc, loss = step(x, y, net=net, optimizer=optimizer, loss_function=loss_function, train=True)
             sum_acc += acc
-        avg_acc = sum_acc / len(train_loader)
-        print(f"Training accuracy: {avg_acc:.2f}")
+        train_avg_acc = sum_acc / len(train_loader)
+        print(f"Training accuracy: {train_avg_acc:.2f}")
 
         net.eval()
         sum_acc = 0
@@ -223,8 +225,24 @@ def main():
             y = y.to(device) # .float()
             val_acc, val_loss = step(x, y, net=net, optimizer=optimizer, loss_function=loss_function, train=True)
             sum_acc += val_acc
-        avg_acc = sum_acc / len(test_loader)
-        print(f"Validation accuracy: {avg_acc:.2f}")
+        test_avg_acc = sum_acc / len(test_loader)
+
+        print(f"Validation accuracy: {test_avg_acc:.2f}")
+        train_steps = len(train_loader) * (epoch + 1)
+        wandb.log({"Train Accuracy": train_avg_acc, "Validation Accuracy": test_avg_acc}, step=train_steps)
+
+    """
+    acc_train = net.train(avg_acc) # ['avg_acc']
+    acc_val = net.eval(avg_acc) # ['avg_acc']
+    epochs = range(1, 100)
+    plt.plot(epochs, acc_train, 'g', label='Training accuracy')
+    plt.plot(epochs, acc_val, 'b', label='Validation accuracy')
+    plt.title('Training and Validation accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+    plt.show()
+    """
 
     # train_preds = get_all_preds(net, test_loader)
     train_preds = get_all_preds(net, prediction_loader)
@@ -232,6 +250,7 @@ def main():
     names = ('Apartment Housing', 'Barren Land', 'Brick Kilns', 'Forest', 'Informal/Small Housing',
              'Irrigated Agriculture', 'Large Industry', 'Non-irrigated Agriculture', 'Small Industry',
              'Water (river/lake)')
+    # wandb.log(cm)
     plt.figure(figsize=(10, 10))
     plot_confusion_matrix(cm, names)
     plt.show()
