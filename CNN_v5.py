@@ -35,7 +35,7 @@ LABELS = ('Apartment Housing', 'Barren Land', 'Brick Kilns', 'Forest', 'Informal
 
 def arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--train-batch-size", type=int, default=100)
     parser.add_argument("--test-batch-size", type=int, default=100)
     parser.add_argument("--pred-batch-size", type=int, default=100)
