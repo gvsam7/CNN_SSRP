@@ -74,10 +74,9 @@ class Net(nn.Module):
 
             return conv_block, (out_channels, out_h, out_w)
 
-        self.conv1, input_size = _add_layer(input_size[0], 32, 3, input_size)
-        self.conv2, input_size = _add_layer(input_size[0], 64, 3, input_size)
-        self.conv3, input_size = _add_layer(input_size[0], 128, 3, input_size)
-        self.conv4, input_size = _add_layer(input_size[0], 256, 3, input_size)
+        self.conv1, input_size = _add_layer(input_size[0], 32, 5, input_size)
+        self.conv2, input_size = _add_layer(input_size[0], 64, 5, input_size)
+        self.conv3, input_size = _add_layer(input_size[0], 128, 5, input_size)
 
         input_size_flattened = np.product(input_size)
         self.fc1 = nn.Linear(input_size_flattened, 512)
@@ -91,7 +90,6 @@ class Net(nn.Module):
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
-        x = self.conv4(x)
         return x
 
     def forward(self, x):
@@ -202,6 +200,7 @@ def main():
     prediction_loader = DataLoader(testset, batch_size=PRED_BATCH_SIZE)
 
     net = Net(INPUT_SIZE).to(device)
+    import pdb; pdb.set_trace()
     optimizer = optim.Adam(net.parameters(), lr=0.001)
     loss_function = nn.CrossEntropyLoss()
 

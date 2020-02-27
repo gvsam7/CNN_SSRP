@@ -157,7 +157,7 @@ def main():
         device = torch.device("cpu")
         print("Running on the CPU")
 
-    EPOCHS = 2
+    EPOCHS = 100
     TRAIN_BATCH_SIZE = 100
     TEST_BATCH_SIZE = 100
     PRED_BATCH_SIZE = 100
