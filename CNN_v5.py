@@ -200,7 +200,6 @@ def main():
     prediction_loader = DataLoader(testset, batch_size=PRED_BATCH_SIZE)
 
     net = Net(INPUT_SIZE).to(device)
-    import pdb; pdb.set_trace()
     optimizer = optim.Adam(net.parameters(), lr=0.001)
     loss_function = nn.CrossEntropyLoss()
 
