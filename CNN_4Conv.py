@@ -1,9 +1,9 @@
 """
 Author: Georgios Voulgaris
-Date: 22/01/2020
-Description: Create a simple CNN to train the classifier. Start from small and expand in order to achieve
-Optimal performance. Initially there will be 2 classes to train the classifier (water and barren land)
-Once a good performance is achieved a total of 10 classes will be added.
+Date: 25/02/2020
+Description: Create a simple 4 conv layer CNN to train the 9 classifiers. Use wandb to display
+activation/validation accuracy. Because there are 9 classes confusion matrix and f1 score is
+displayed.
 """
 
 import os
@@ -83,10 +83,6 @@ class Net(nn.Module):
         self.fc1 = nn.Linear(input_size_flattened, 512)
         self.fc2 = nn.Linear(512, 9)
 
-        # Define sigmoid activation and softmax output
-        # self.sigmoid = nn.Sigmoid()
-        # self.softmax = nn.Softmax(dim=1)
-
     def convs(self, x):
         x = self.conv1(x)
         x = self.conv2(x)
@@ -99,8 +95,6 @@ class Net(nn.Module):
         x = x.flatten(start_dim=1)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
-        # x = self.softmax(x)
-        # x = F.softmax(x)
         return x
 
 
@@ -108,11 +102,6 @@ def step(x, y, net, optimizer, loss_function, train):
 
     with torch.set_grad_enabled(train):
         outputs = net(x)
-        # acc = (outputs.sigmoid().round() == y).float().mean() * 100
-        # matches = [torch.argmax(i) == torch.argmax(j) for i, j in zip(outputs, y)]
-        # then I want to count how many trues and how many false
-        # acc = matches.count(True) / len(matches)  # this will give a percentage of accuracy
-        # acc = (outputs.argmax(dim=1) == y.argmax(dim=1)).float().mean()
         acc = outputs.argmax(dim=1).eq(y).sum().item()
         # print(f"Outputs: {outputs}, y: {y}")
         loss = loss_function(outputs, y)
@@ -168,9 +157,8 @@ def main():
         device = torch.device("cpu")
         print("Running on the CPU")
 
-    EPOCHS = 100
+    EPOCHS = 2
     TRAIN_BATCH_SIZE = 100
-    # VAL_BATCH_SIZE = 100
     TEST_BATCH_SIZE = 100
     PRED_BATCH_SIZE = 100
 
@@ -178,22 +166,7 @@ def main():
     dataset = ImageFolder("Data_WetSeason", transform=transforms)
     testset = ImageFolder("Test_WetSeason", transform=transforms)
     INPUT_SIZE = dataset[0][0].shape
-    """
-    train_val_len = int(0.9 * len(dataset))
-    test_len = int(len(dataset) - train_val_len)
-    train_len = int(0.8 * 0.9 * len(dataset))
-    val_len = int(len(dataset) - test_len - train_len)
-    """
-    """train_len = int(0.7 * len(dataset))
-    val_len = int(0.1 * len(dataset))
-    test_len = int(len(dataset) - train_len - val_len)
-    # train, test = random_split(dataset, lengths=(train_len, test_len))
-    train, validation, test = random_split(dataset, lengths=(train_len, val_len, test_len))
-    train_loader = DataLoader(train, batch_size=TRAIN_BATCH_SIZE, shuffle=True)
-    val_loader = DataLoader(validation, batch_size=VAL_BATCH_SIZE, shuffle=False)
-    test_loader = DataLoader(test, batch_size=TEST_BATCH_SIZE, shuffle=False)
-    # prediction_loader = DataLoader(dataset, batch_size=PRED_BATCH_SIZE)
-    """
+
     train_len = int(0.8 * len(dataset))
     test_len = int(len(dataset) - train_len)
     train, test = random_split(dataset, lengths=(train_len, test_len))
@@ -205,7 +178,6 @@ def main():
     optimizer = optim.Adam(net.parameters(), lr=0.001)
     loss_function = nn.CrossEntropyLoss()
 
-    # with open("CNN_model.log", "a") as f:
     for epoch in range(EPOCHS):
 
         net.train()
@@ -251,58 +223,5 @@ def main():
     print('support: {}'.format(support, average="None"))
 
 
-"""MODEL_NAME = f"model-{int(time.time())}"
-    f.write(f"{MODEL_NAME}, "
-            f"epoch: {epoch}, "
-            f"time:{round(time.time(), 3)}, "
-            f"train accuracy: {round(float(acc), 2)}, "
-            f"train loss: {round(float(loss), 4)}, "
-            f"validation accuracy: {round(float(val_acc), 2)}, "
-            f"validation loss: {round(float(val_loss), 4)}\n")
-            """
-
-"""style.use("ggplot")
-model_name = "model-1579796306"
-
-
-def create_acc_loss_graph(model_name):
-    contents = open("model.log", "r").read().split("\n")
-
-    times = []
-    accuracies = []
-    losses = []
-
-    val_accs = []
-    val_losses = []
-
-    for c in contents:
-        if model_name in c:
-            name, timestamp, acc, loss, val_acc, val_loss = c.split(",")
-
-            times.append(float(timestamp))
-            accuracies.append(float(acc))
-            losses.append(float(loss))
-
-            val_accs.append(float(val_acc))
-            val_losses.append(float(val_loss))
-
-    fig = plt.figure()
-    ax1 = plt.subplot2grid((2, 1), (0, 0))
-    ax2 = plt.subplot2grid((2, 1), (1, 0), sharex=ax1)
-
-    ax1.plot(times, accuracies, label='in_sample_acc')
-    ax1.plot(times, val_accs, label="out_sample_acc")
-    ax1.legend(loc=2)
-
-    ax2.plot(times, losses, label='in_sample_loss')
-    ax2.plot(times, val_losses, label="out_sample_loss")
-    ax2.legend(loc=2)
-
-    plt.show()
-    
-
-
-create_acc_loss_graph(model_name)
-"""
 if __name__ == "__main__":
     main()
