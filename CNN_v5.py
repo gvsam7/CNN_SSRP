@@ -140,12 +140,12 @@ def step(x, y, net, optimizer, loss_function, train):
 
 @torch.no_grad()
 def get_all_preds(model, loader, device):
-    all_preds = torch.tensor([])
-    for x, y in loader:
+    all_preds = []
+    for x, _ in loader:
         x = x.to(device)
-        y = y.to(device)
         preds = model(x)
-        all_preds = torch.cat((all_preds, preds), dim=0)
+        all_preds.append(preds)
+    all_preds = torch.cat(all_preds, dim=0).cpu()
     return all_preds
 
 
@@ -251,6 +251,7 @@ def main():
     print('recall: {}'.format(recall, average="None"))
     print('f1_score: {}'.format(f1_score, average="None"))
     print('support: {}'.format(support, average="None"))
+
 
 if __name__ == "__main__":
     main()
