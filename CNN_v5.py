@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import argparse
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_fscore_support as score
 import itertools
@@ -26,6 +27,20 @@ import matplotlib.pyplot as plt
 from matplotlib import style
 import wandb
 wandb.init(project="cnn_ssrp")
+
+LABELS = ('Apartment Housing', 'Barren Land', 'Brick Kilns', 'Forest', 'Informal/Small Housing',
+          'Large Industry', 'Non-irrigated Agriculture', 'Small Industry',
+          'Water (river/lake)')
+
+
+def arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--train-batch-size", type=int, default=100)
+    parser.add_argument("--test-batch-size", type=int, default=100)
+    parser.add_argument("--pred-batch-size", type=int, default=100)
+
+    return parser.parse_args()
 
 
 def _infer_conv_size(w, k, s, p, d):
@@ -124,10 +139,11 @@ def step(x, y, net, optimizer, loss_function, train):
 
 
 @torch.no_grad()
-def get_all_preds(model, loader):
+def get_all_preds(model, loader, device):
     all_preds = torch.tensor([])
-    for batch in loader:
-        x, y = batch
+    for x, y in loader:
+        x = x.to(device)
+        y = y.to(device)
         preds = model(x)
         all_preds = torch.cat((all_preds, preds), dim=0)
     return all_preds
@@ -159,18 +175,15 @@ def plot_confusion_matrix(cm, classes, normalize=False, title='Confusion matrix'
 
 
 def main():
+
+    args = arguments()
+
     if torch.cuda.is_available():
         device = torch.device("cuda:0")  # Can continue going on here, like cuda:1 cuda:2....etc.
         print("Running on the GPU")
     else:
         device = torch.device("cpu")
         print("Running on the CPU")
-
-    EPOCHS = 100
-    TRAIN_BATCH_SIZE = 100
-    # VAL_BATCH_SIZE = 100
-    TEST_BATCH_SIZE = 100
-    PRED_BATCH_SIZE = 100
 
     transforms = Compose([Resize((50, 50)), ToTensor()])
     dataset = ImageFolder("Data_WetSeason", transform=transforms)
@@ -195,23 +208,21 @@ def main():
     train_len = int(0.8 * len(dataset))
     test_len = int(len(dataset) - train_len)
     train, test = random_split(dataset, lengths=(train_len, test_len))
-    train_loader = DataLoader(train, batch_size=TRAIN_BATCH_SIZE, shuffle=True)
-    test_loader = DataLoader(test, batch_size=TEST_BATCH_SIZE, shuffle=False)
-    prediction_loader = DataLoader(testset, batch_size=PRED_BATCH_SIZE)
+    train_loader = DataLoader(train, batch_size=args.train_batch_size, shuffle=True)
+    test_loader = DataLoader(test, batch_size=args.test_batch_size, shuffle=False)
+    prediction_loader = DataLoader(testset, batch_size=args.pred_batch_size)
 
     net = Net(INPUT_SIZE).to(device)
     optimizer = optim.Adam(net.parameters(), lr=0.001)
     loss_function = nn.CrossEntropyLoss()
 
     # with open("CNN_model.log", "a") as f:
-    for epoch in range(EPOCHS):
-
+    for epoch in range(args.epochs):
         net.train()
         sum_acc = 0
         for x, y in train_loader:
             x = x.to(device)
-            save_image(x, "x.png")
-            y = y.to(device) # .float()
+            y = y.to(device)
             acc, loss = step(x, y, net=net, optimizer=optimizer, loss_function=loss_function, train=True)
             sum_acc += acc
         train_avg_acc = sum_acc / len(train_loader)
@@ -221,8 +232,7 @@ def main():
         sum_acc = 0
         for x, y in test_loader:
             x = x.to(device)
-            save_image(x, "x2.png")
-            y = y.to(device)  # .float()
+            y = y.to(device)
             val_acc, val_loss = step(x, y, net=net, optimizer=optimizer, loss_function=loss_function, train=True)
             sum_acc += val_acc
         test_avg_acc = sum_acc / len(test_loader)
@@ -232,75 +242,15 @@ def main():
         wandb.log({"Train Accuracy": train_avg_acc, "Validation Accuracy": test_avg_acc}, step=train_steps)
 
     # train_preds = get_all_preds(net, test_loader)
-    train_preds = get_all_preds(net, prediction_loader)
-    cm = confusion_matrix(testset.targets, train_preds.argmax(dim=1))
-    names = ('Apartment Housing', 'Barren Land', 'Brick Kilns', 'Forest', 'Informal/Small Housing',
-             'Large Industry', 'Non-irrigated Agriculture', 'Small Industry',
-             'Water (river/lake)')
-    # wandb.log(cm)
+    train_preds = get_all_preds(net, loader=prediction_loader, device=device)
     plt.figure(figsize=(10, 10))
-    plot_confusion_matrix(cm, names)
-    plt.show()
-
+    wandb.sklearn.plot_confusion_matrix(testset.targets, train_preds.argmax(dim=1), LABELS)
     precision, recall, f1_score, support = score(testset.targets, train_preds.argmax(dim=1))
+
     print('precision: {}'.format(precision, average="None"))
     print('recall: {}'.format(recall, average="None"))
     print('f1_score: {}'.format(f1_score, average="None"))
     print('support: {}'.format(support, average="None"))
 
-
-"""MODEL_NAME = f"model-{int(time.time())}"
-    f.write(f"{MODEL_NAME}, "
-            f"epoch: {epoch}, "
-            f"time:{round(time.time(), 3)}, "
-            f"train accuracy: {round(float(acc), 2)}, "
-            f"train loss: {round(float(loss), 4)}, "
-            f"validation accuracy: {round(float(val_acc), 2)}, "
-            f"validation loss: {round(float(val_loss), 4)}\n")
-            """
-
-"""style.use("ggplot")
-model_name = "model-1579796306"
-
-
-def create_acc_loss_graph(model_name):
-    contents = open("model.log", "r").read().split("\n")
-
-    times = []
-    accuracies = []
-    losses = []
-
-    val_accs = []
-    val_losses = []
-
-    for c in contents:
-        if model_name in c:
-            name, timestamp, acc, loss, val_acc, val_loss = c.split(",")
-
-            times.append(float(timestamp))
-            accuracies.append(float(acc))
-            losses.append(float(loss))
-
-            val_accs.append(float(val_acc))
-            val_losses.append(float(val_loss))
-
-    fig = plt.figure()
-    ax1 = plt.subplot2grid((2, 1), (0, 0))
-    ax2 = plt.subplot2grid((2, 1), (1, 0), sharex=ax1)
-
-    ax1.plot(times, accuracies, label='in_sample_acc')
-    ax1.plot(times, val_accs, label="out_sample_acc")
-    ax1.legend(loc=2)
-
-    ax2.plot(times, losses, label='in_sample_loss')
-    ax2.plot(times, val_losses, label="out_sample_loss")
-    ax2.legend(loc=2)
-
-    plt.show()
-    
-
-
-create_acc_loss_graph(model_name)
-"""
 if __name__ == "__main__":
     main()
