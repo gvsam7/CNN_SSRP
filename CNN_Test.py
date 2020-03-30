@@ -1,16 +1,15 @@
 """
 Author: Georgios Voulgaris
-Date: 25/02/2020
-Description: Create a simple 4 conv layer CNN to train the 9 classifiers. Use wandb to display
-activation/validation accuracy. Because there are 9 classes confusion matrix and f1 score is
-displayed.
+Date: 12/03/2020
+Description: Create a simple CNN to train the classifier. Then use all the dry season data for testing. Note that
+there are 10 classes on the training set under Data folder. The test data are unlabelled and are under Test/sub folder.
+I had to create the sub folder because otherwise was getting an error.
+Finally, a csv file was created that contain the filename and the predictions made after the classifier was trained
+using the training data.
 """
 
-import os
-import cv2
+
 import numpy as np
-from tqdm import tqdm
-from torchvision.utils import save_image
 from torchvision.datasets import ImageFolder
 from torchvision.transforms import ToTensor, Compose, RandomHorizontalFlip, Grayscale, Resize
 from torch.utils.data import random_split, DataLoader
@@ -18,14 +17,29 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import argparse
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_fscore_support as score
+from sklearn.metrics import accuracy_score
 import itertools
-import time
 import matplotlib.pyplot as plt
-from matplotlib import style
 import wandb
 wandb.init(project="cnn_ssrp")
+import pandas as pd
+import os
+import csv
+
+LABELS = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
+
+
+def arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--train-batch-size", type=int, default=100)
+    parser.add_argument("--val-batch-size", type=int, default=100)
+    parser.add_argument("--pred-batch-size", type=int, default=100)
+
+    return parser.parse_args()
 
 
 def _infer_conv_size(w, k, s, p, d):
@@ -74,20 +88,18 @@ class Net(nn.Module):
 
             return conv_block, (out_channels, out_h, out_w)
 
-        self.conv1, input_size = _add_layer(input_size[0], 32, 3, input_size)
-        self.conv2, input_size = _add_layer(input_size[0], 64, 3, input_size)
-        self.conv3, input_size = _add_layer(input_size[0], 128, 3, input_size)
-        self.conv4, input_size = _add_layer(input_size[0], 256, 3, input_size)
+        self.conv1, input_size = _add_layer(input_size[0], 32, 5, input_size)
+        self.conv2, input_size = _add_layer(input_size[0], 64, 5, input_size)
+        self.conv3, input_size = _add_layer(input_size[0], 128, 5, input_size)
 
         input_size_flattened = np.product(input_size)
         self.fc1 = nn.Linear(input_size_flattened, 512)
-        self.fc2 = nn.Linear(512, 9)
+        self.fc2 = nn.Linear(512, 10)
 
     def convs(self, x):
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
-        x = self.conv4(x)
         return x
 
     def forward(self, x):
@@ -95,6 +107,8 @@ class Net(nn.Module):
         x = x.flatten(start_dim=1)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
+        # x = self.softmax(x)
+        # x = F.softmax(x)
         return x
 
 
@@ -115,12 +129,13 @@ def step(x, y, net, optimizer, loss_function, train):
 
 
 @torch.no_grad()
-def get_all_preds(model, loader):
-    all_preds = torch.tensor([])
-    for batch in loader:
-        x, y = batch
+def get_all_preds(model, loader, device):
+    all_preds = []
+    for x, _ in loader:
+        x = x.to(device)
         preds = model(x)
-        all_preds = torch.cat((all_preds, preds), dim=0)
+        all_preds.append(preds)
+    all_preds = torch.cat(all_preds, dim=0).cpu()
     return all_preds
 
 
@@ -150,6 +165,9 @@ def plot_confusion_matrix(cm, classes, normalize=False, title='Confusion matrix'
 
 
 def main():
+
+    args = arguments()
+
     if torch.cuda.is_available():
         device = torch.device("cuda:0")  # Can continue going on here, like cuda:1 cuda:2....etc.
         print("Running on the GPU")
@@ -157,34 +175,27 @@ def main():
         device = torch.device("cpu")
         print("Running on the CPU")
 
-    EPOCHS = 100
-    TRAIN_BATCH_SIZE = 100
-    TEST_BATCH_SIZE = 100
-    PRED_BATCH_SIZE = 100
-
     transforms = Compose([Resize((50, 50)), ToTensor()])
-    dataset = ImageFolder("Data_WetSeason", transform=transforms)
-    testset = ImageFolder("Test_WetSeason", transform=transforms)
+    dataset = ImageFolder("Data_Test", transform=transforms)
+    testset = ImageFolder("Test", transform=transforms)
     INPUT_SIZE = dataset[0][0].shape
-
     train_len = int(0.8 * len(dataset))
-    test_len = int(len(dataset) - train_len)
-    train, test = random_split(dataset, lengths=(train_len, test_len))
-    train_loader = DataLoader(train, batch_size=TRAIN_BATCH_SIZE, shuffle=True)
-    test_loader = DataLoader(test, batch_size=TEST_BATCH_SIZE, shuffle=False)
-    prediction_loader = DataLoader(testset, batch_size=PRED_BATCH_SIZE)
+    val_len = int(len(dataset) - train_len)
+    train, val = random_split(dataset, lengths=(train_len, val_len))
+    train_loader = DataLoader(train, batch_size=args.train_batch_size, shuffle=True)
+    val_loader = DataLoader(val, batch_size=args.val_batch_size, shuffle=False)
+    prediction_loader = DataLoader(testset, batch_size=args.pred_batch_size)
 
     net = Net(INPUT_SIZE).to(device)
     optimizer = optim.Adam(net.parameters(), lr=0.001)
     loss_function = nn.CrossEntropyLoss()
 
-    for epoch in range(EPOCHS):
-
+    # with open("CNN_model.log", "a") as f:
+    for epoch in range(args.epochs):
         net.train()
         sum_acc = 0
         for x, y in train_loader:
             x = x.to(device)
-            save_image(x, "x.png")
             y = y.to(device)
             acc, loss = step(x, y, net=net, optimizer=optimizer, loss_function=loss_function, train=True)
             sum_acc += acc
@@ -193,34 +204,54 @@ def main():
 
         net.eval()
         sum_acc = 0
-        for x, y in test_loader:
+        for x, y in val_loader:
             x = x.to(device)
-            save_image(x, "x2.png")
             y = y.to(device)
             val_acc, val_loss = step(x, y, net=net, optimizer=optimizer, loss_function=loss_function, train=True)
             sum_acc += val_acc
-        test_avg_acc = sum_acc / len(test_loader)
+        val_avg_acc = sum_acc / len(val_loader)
 
-        print(f"Validation accuracy: {test_avg_acc:.2f}")
+        print(f"Validation accuracy: {val_avg_acc:.2f}")
         train_steps = len(train_loader) * (epoch + 1)
-        wandb.log({"Train Accuracy": train_avg_acc, "Validation Accuracy": test_avg_acc}, step=train_steps)
+        wandb.log({"Train Accuracy": train_avg_acc, "Validation Accuracy": val_avg_acc}, step=train_steps)
 
-    # train_preds = get_all_preds(net, test_loader)
-    train_preds = get_all_preds(net, prediction_loader)
-    cm = confusion_matrix(testset.targets, train_preds.argmax(dim=1))
-    names = ('Apartment Housing', 'Barren Land', 'Brick Kilns', 'Forest', 'Informal/Small Housing',
-             'Large Industry', 'Non-irrigated Agriculture', 'Small Industry',
-             'Water (river/lake)')
-    # wandb.log(cm)
+
+    train_preds = get_all_preds(net, loader=prediction_loader, device=device)
+    print(f"Train predictions shape: {train_preds.shape}")
+    print(f"The label the network predicts strongly: {train_preds.argmax(dim=1)}")
+    predictions = train_preds.argmax(dim=1)
+
+    # Scans folder for files, and then writes the filenames to CSV format
+    with open('Test_data.csv', 'w', newline='') as f:  # creates csv
+        writer_obj = csv.writer(f)
+        writer_obj.writerow(['filename'])
+        with os.scandir('Test/sub/') as folder:  # scans folder to read file names
+            for file in folder:
+                print(f"Entry: {file.name}")
+                writer_obj.writerow([file.name])
+
+    # Read csv file and create a data frame containing the filenames and predictions. Then this data frame is
+    # written to csv.
+    df = pd.read_csv('Test_data.csv')
+    filename = df['filename']
+    signal_dict = {
+        # 'filename': file.name,
+        'filename': filename,
+        'prediction': predictions.tolist(),
+    }
+    df = pd.DataFrame(signal_dict)
+    df.to_csv('new_df.csv')
+
     plt.figure(figsize=(10, 10))
-    plot_confusion_matrix(cm, names)
-    plt.show()
-
+    wandb.sklearn.plot_confusion_matrix(testset.targets, train_preds.argmax(dim=1), LABELS)
     precision, recall, f1_score, support = score(testset.targets, train_preds.argmax(dim=1))
-    print('precision: {}'.format(precision, average="None"))
-    print('recall: {}'.format(recall, average="None"))
-    print('f1_score: {}'.format(f1_score, average="None"))
-    print('support: {}'.format(support, average="None"))
+    test_acc = accuracy_score(testset.targets, train_preds.argmax(dim=1))
+
+    print(f"Test Accuracy: {test_acc}")
+    print('precision: {}'.format(precision))
+    print('recall: {}'.format(recall))
+    print('f1_score: {}'.format(f1_score))
+    print('support: {}'.format(support))
 
 
 if __name__ == "__main__":

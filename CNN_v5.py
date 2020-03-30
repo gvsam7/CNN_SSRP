@@ -21,6 +21,7 @@ import torch.optim as optim
 import argparse
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_fscore_support as score
+from sklearn.metrics import accuracy_score
 import itertools
 import time
 import matplotlib.pyplot as plt
@@ -37,7 +38,7 @@ def arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--train-batch-size", type=int, default=100)
-    parser.add_argument("--test-batch-size", type=int, default=100)
+    parser.add_argument("--val-batch-size", type=int, default=100)
     parser.add_argument("--pred-batch-size", type=int, default=100)
 
     return parser.parse_args()
@@ -206,10 +207,10 @@ def main():
     # prediction_loader = DataLoader(dataset, batch_size=PRED_BATCH_SIZE)
     """
     train_len = int(0.8 * len(dataset))
-    test_len = int(len(dataset) - train_len)
-    train, test = random_split(dataset, lengths=(train_len, test_len))
+    val_len = int(len(dataset) - train_len)
+    train, val = random_split(dataset, lengths=(train_len, val_len))
     train_loader = DataLoader(train, batch_size=args.train_batch_size, shuffle=True)
-    test_loader = DataLoader(test, batch_size=args.test_batch_size, shuffle=False)
+    val_loader = DataLoader(val, batch_size=args.val_batch_size, shuffle=False)
     prediction_loader = DataLoader(testset, batch_size=args.pred_batch_size)
 
     net = Net(INPUT_SIZE).to(device)
@@ -230,27 +231,29 @@ def main():
 
         net.eval()
         sum_acc = 0
-        for x, y in test_loader:
+        for x, y in val_loader:
             x = x.to(device)
             y = y.to(device)
             val_acc, val_loss = step(x, y, net=net, optimizer=optimizer, loss_function=loss_function, train=True)
             sum_acc += val_acc
-        test_avg_acc = sum_acc / len(test_loader)
+        val_avg_acc = sum_acc / len(val_loader)
 
-        print(f"Validation accuracy: {test_avg_acc:.2f}")
+        print(f"Validation accuracy: {val_avg_acc:.2f}")
         train_steps = len(train_loader) * (epoch + 1)
-        wandb.log({"Train Accuracy": train_avg_acc, "Validation Accuracy": test_avg_acc}, step=train_steps)
+        wandb.log({"Train Accuracy": train_avg_acc, "Validation Accuracy": val_avg_acc}, step=train_steps)
 
     # train_preds = get_all_preds(net, test_loader)
     train_preds = get_all_preds(net, loader=prediction_loader, device=device)
     plt.figure(figsize=(10, 10))
     wandb.sklearn.plot_confusion_matrix(testset.targets, train_preds.argmax(dim=1), LABELS)
     precision, recall, f1_score, support = score(testset.targets, train_preds.argmax(dim=1))
+    test_acc = accuracy_score(testset.targets, train_preds.argmax(dim=1))
 
-    print('precision: {}'.format(precision, average="None"))
-    print('recall: {}'.format(recall, average="None"))
-    print('f1_score: {}'.format(f1_score, average="None"))
-    print('support: {}'.format(support, average="None"))
+    print(f"Test Accuracy: {test_acc}")
+    print('precision: {}'.format(precision))
+    print('recall: {}'.format(recall))
+    print('f1_score: {}'.format(f1_score))
+    print('support: {}'.format(support))
 
 
 if __name__ == "__main__":
